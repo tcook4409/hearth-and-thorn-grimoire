@@ -42,3 +42,7 @@ A forest-green Gothic Cottagecore recipe PWA with editable recipes, cooking mode
 ## Next upgrades
 
 Verified two-way sync, conflict resolution, account authentication, ingredient scaling, food photos, and timer controls.
+
+
+## Version 3 visual/layout update
+Recipe cards now use separate accessible Open and Favorite buttons, fixing broken nesting and scattered layout. Decorative ivy, roses, tiny bats, and moon accents have been added to the header. Upload all files (including `botanical.svg`) to the repository root, replacing existing files. Refresh the published site; if an older PWA is cached, close/reopen or hard-refresh. Local recipes and lists are not intentionally cleared by this update.
