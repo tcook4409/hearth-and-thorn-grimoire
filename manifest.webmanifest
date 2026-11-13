@@ -1,0 +1,17 @@
+{
+  "name": "The Hearth & Thorn Grimoire",
+  "short_name": "Hearth & Thorn",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#102d22",
+  "theme_color": "#102d22",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "description": "A cozy gothic cottage cookbook for culinary enchantments"
+}
