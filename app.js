@@ -26,8 +26,54 @@ async function importBackup(file){
   status='Restored '+recipes.length+' recipes on this device.';render();
  }catch(e){status='Import failed: '+e.message;render()}
 }
-function renderSettings(){el.innerHTML=`<h2>Settings & Your Recipe Book</h2><div class="paper"><h3>🌿 Your private kitchen</h3><p>Your recipes are saved on this device for now. The private Google Sheets database is prepared, but secure account login and cross-device syncing are <strong>not yet connected</strong>.</p><p class="notice">For your safety, the old shared-key syncing controls have been removed. Do not publish a PIN or shared sync key in GitHub or deploy an unprotected Apps Script endpoint.</p><h3>Version 6 · Sync preparation</h3><p>Your private Sheets database has been validated. Cross-device login is still disabled until a secure Google identity flow and server permissions are tested. This page does not ask for or store your PIN.</p><h3>Save a backup</h3><p>Download a copy of your recipes, favorites, and shopping list before switching devices or clearing browser data.</p><button class="action" id="export-backup">↓ Download backup</button><h3>Restore a backup</h3><p>Restoring replaces the recipes on this device. It does not change Google Sheets.</p><label>Choose a Hearth & Thorn backup (.json)<input id="import-backup" type="file" accept=".json,application/json"></label><p class="status">${esc(status)}</p></div>`;
+// This is a sign-in UI test only. Never trust a browser-decoded identity for access control.
+let googleSignInLoaded=false, googleSignInLoading=false, googleSignInError='';
+let googlePreview=null; // In-memory only; no Google credential is persisted.
+function loadGoogleIdentity(){
+ if(googleSignInLoaded||googleSignInLoading)return;
+ googleSignInLoading=true;
+ const script=document.createElement('script');
+ script.src='https://accounts.google.com/gsi/client';script.async=true;
+ script.onload=()=>{googleSignInLoading=false;googleSignInLoaded=true;if(page==='settings')renderSettings()};
+ script.onerror=()=>{googleSignInLoading=false;googleSignInError='Google sign-in could not load. Check your connection and try again.';if(page==='settings')renderSettings()};
+ document.head.appendChild(script);
+}
+function decodeGooglePreview(jwt){
+ // Claims decoded here are for display ONLY and are not verified.
+ const payload=jwt.split('.')[1];if(!payload)throw Error('Missing sign-in payload');
+ const base64=payload.replace(/-/g,'+').replace(/_/g,'/');
+ const data=JSON.parse(atob(base64.padEnd(Math.ceil(base64.length/4)*4,'=')));
+ return {name:typeof data.name==='string'?data.name:'Google user',email:typeof data.email==='string'?data.email:'',aud:data.aud};
+}
+function onGooglePreview(response){
+ try{
+  const id=localStorage.getItem('ht_google_client_id')||'';
+  const info=decodeGooglePreview(response.credential||'');
+  if(info.aud!==id)throw Error('Client ID did not match');
+  googlePreview={name:info.name,email:info.email};
+  googleSignInError='';
+ }catch(e){googlePreview=null;googleSignInError='Sign-in preview failed: '+e.message}
+ if(page==='settings')renderSettings();
+}
+function renderGoogleButton(){
+ const id=localStorage.getItem('ht_google_client_id')||'';
+ const target=$('#google-signin-button');if(!target||!id||!googleSignInLoaded)return;
+ if(!/^[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(id)){
+  googleSignInError='That does not look like a Google OAuth Client ID.';return;
+ }
+ try{
+  google.accounts.id.initialize({client_id:id,callback:onGooglePreview,auto_select:false,ux_mode:'popup'});
+  google.accounts.id.renderButton(target,{theme:'outline',size:'large',text:'signin_with',shape:'pill'});
+ }catch(e){googleSignInError='Could not initialize Google Sign-In.'}
+}
+function renderSettings(){
+ const id=localStorage.getItem('ht_google_client_id')||'';
+ el.innerHTML=`<h2>Settings & Your Recipe Book</h2><div class="paper"><h3>🌿 Google Sign-In · Test only</h3><p>Try signing in with Google. This only previews your account on this device. <strong>It does not verify access on our server, connect Google Sheets, or sync recipes.</strong></p><label>Google OAuth Client ID (public, not the Client Secret)<input id="google-client-id" type="text" spellcheck="false" autocomplete="off" placeholder="Numbers-and-letters.apps.googleusercontent.com" value="${esc(id)}"></label><button class="action secondary" id="save-google-id">Save Client ID on this device</button><div id="google-signin-button" class="google-signin-slot"></div>${googlePreview?`<p class="notice">Google sign-in preview: ${esc(googlePreview.name)}${googlePreview.email?' ('+esc(googlePreview.email)+')':''}. <strong>Not server-verified.</strong></p><button class="action secondary" id="google-signout">Clear sign-in preview</button>`:''}${googleSignInError?`<p class="notice">${esc(googleSignInError)}</p>`:''}<p class="tiny">Never enter your Client Secret, Keeper PIN, or Google Sheets credentials here. Google sign-in results are not stored as login credentials.</p><h3>🌿 Your private kitchen</h3><p>Recipes are still saved on this device. Secure account authorization and cross-device syncing are <strong>not yet connected</strong>.</p><h3>Save a backup</h3><p>Download a copy of your recipes, favorites, and shopping list.</p><button class="action" id="export-backup">↓ Download backup</button><h3>Restore a backup</h3><p>Restoring replaces recipes on this device. It does not change Google Sheets.</p><label>Choose a Hearth & Thorn backup (.json)<input id="import-backup" type="file" accept=".json,application/json"></label><p class="status">${esc(status)}</p></div>`;
+ $('#save-google-id').onclick=()=>{const next=$('#google-client-id').value.trim();if(next&&!/^[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(next)){googleSignInError='Please enter a valid OAuth Client ID (not the secret).';renderSettings();return}localStorage.setItem('ht_google_client_id',next);googlePreview=null;googleSignInError='';renderSettings()};
  $('#export-backup').onclick=downloadBackup;
  $('#import-backup').onchange=e=>importBackup(e.target.files?.[0]);
+ if($('#google-signout'))$('#google-signout').onclick=()=>{googlePreview=null;try{google.accounts.id.disableAutoSelect()}catch{}renderSettings()};
+ if(!googleSignInLoaded)loadGoogleIdentity();else renderGoogleButton();
 }
+
 async function init(){if(localStorage.getItem('lb_recipes')===null){try{const r=await fetch('recipes.json');recipes=await r.json();persist()}catch{status='Starter recipes unavailable offline until first load.'}}render();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
